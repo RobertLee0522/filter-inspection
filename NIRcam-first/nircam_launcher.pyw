@@ -28,9 +28,12 @@ import subprocess
 import sys
 import tkinter as tk
 
+from license_check import enforce_license_or_exit
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(HERE, "logs")
 ART = os.path.join(HERE, "assets", "splash.png")
+BASIC_DEMO_EXE = os.path.join(HERE, "BasicDemo.exe")
 
 # Splash geometry, as fractions of the artwork. The ring centre and radius
 # were measured off assets/splash.png (centre 752,512 of 1536x1024); the
@@ -141,13 +144,23 @@ class Splash:
         log.write(f"\n{'=' * 70}\nlaunched "
                   f"{_dt.datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 70}\n")
         try:
-            # -u: without it Python block-buffers a redirected stdout, so this
-            # log sits empty for minutes and loses whatever is still buffered
-            # if the process is killed. BasicDemo.py keeps its own log too
-            # (session_log.py); this one captures anything that dies before
-            # that gets installed.
+            # Packaged builds ship BasicDemo.exe next to this launcher (see
+            # PACKAGING.md); running from source (dev, no build.ps1 run yet)
+            # falls back to the interpreter + script. Args are always passed
+            # as a list, never a joined string -- the install path is
+            # "C:\Program Files\FilterInspection\...", and a space in a
+            # single command string would truncate the path.
+            if os.path.isfile(BASIC_DEMO_EXE):
+                cmd = [BASIC_DEMO_EXE]
+            else:
+                # -u: without it Python block-buffers a redirected stdout, so
+                # this log sits empty for minutes and loses whatever is still
+                # buffered if the process is killed. BasicDemo.py keeps its
+                # own log too (session_log.py); this one captures anything
+                # that dies before that gets installed.
+                cmd = [sys.executable, "-s", "-u", "BasicDemo.py"]
             self.proc = subprocess.Popen(
-                [sys.executable, "-s", "-u", "BasicDemo.py"],
+                cmd,
                 cwd=HERE, env=child_environment(),
                 stdout=log, stderr=log,
                 creationflags=subprocess.CREATE_NO_WINDOW)
@@ -185,6 +198,10 @@ class Splash:
 
 
 if __name__ == "__main__":
+    # Checked here too, not just in BasicDemo.py: double-clicking
+    # BasicDemo.exe directly must not bypass this.
+    enforce_license_or_exit()
+
     root = tk.Tk()
     root.title("itri AI detect")
     Splash(root)

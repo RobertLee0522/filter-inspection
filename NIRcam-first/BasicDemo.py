@@ -5,6 +5,28 @@
 from session_log import start_session_log
 start_session_log()
 
+# Checked here too, not just in nircam_launcher.pyw: launching this exe
+# directly (skipping the splash) must not bypass the license check.
+from license_check import enforce_license_or_exit
+enforce_license_or_exit()
+
+# MvCameraControl_class loads MvCameraControl.dll by bare name via
+# ctypes.WinDLL at import time. If the vendor's Hikvision MVS runtime isn't
+# on this machine that raises an OSError deep inside an `import *`, which
+# looks like a crash to an operator. Probe for it first and fail with a
+# message box instead.
+import ctypes as _ctypes
+try:
+    _ctypes.WinDLL("MvCameraControl.dll")
+except OSError:
+    _ctypes.windll.user32.MessageBoxW(
+        None,
+        "找不到 Hikvision MVS 相機驅動（MvCameraControl.dll）。\n"
+        "請先安裝 MVS Runtime 後再啟動本程式，或聯絡窗口協助排除。",
+        "NIRcam Inspection", 0x10)
+    import sys as _sys
+    _sys.exit(1)
+
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal, Qt
 from PyQt5.QtGui import QImage, QPixmap
