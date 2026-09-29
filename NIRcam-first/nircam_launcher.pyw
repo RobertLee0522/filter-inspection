@@ -30,9 +30,13 @@ import tkinter as tk
 
 from license_check import enforce_license_or_exit
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# Two different directories once this is a Nuitka onefile exe: bundled data
+# (splash.png) is extracted beside __file__ in a temp folder, while
+# BasicDemo.exe and the logs belong in the install folder beside argv[0].
+# Un-frozen they are the same folder.
+HERE = os.path.dirname(os.path.abspath(sys.argv[0]))
 LOG_DIR = os.path.join(HERE, "logs")
-ART = os.path.join(HERE, "assets", "splash.png")
+ART = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "splash.png")
 BASIC_DEMO_EXE = os.path.join(HERE, "BasicDemo.exe")
 
 # Splash geometry, as fractions of the artwork. The ring centre and radius

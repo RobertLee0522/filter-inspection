@@ -95,7 +95,7 @@ git 不追蹤，需另外複製到機器上），由 `hybrid_detect.load_model()
 VERSION = "1.0.0"
 ```
 
-`BasicDemo.py` 主視窗標題列與「關於」對話框顯示 `f"itri AI detect v{VERSION}"`。
+`BasicDemo.py` 主視窗標題列顯示 `f"工業相機 AI 檢測應用 v{VERSION}"`（沒有獨立的「關於」對話框，只有標題列）。
 `build.ps1` 直接讀這個檔案取得版本號，安裝檔檔名也用它。
 
 ---
@@ -143,6 +143,48 @@ VERSION = "1.0.0"
 │    → 授權碼驗證通過才會裝完（見第 5.1 節，這一步需要人工來回）      │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### 3.1 環境建置指令（第一次在一台新開發機上執行）
+
+這是實際驗證過可行的指令（2026-09-29 在一台 RTX 3080 機器上跑過一次完整流程）。
+
+> **⚠️ 打包環境絕對不能用 Anaconda / conda 環境。** 實測：用 Anaconda Python 3.10
+> 打包出來的 exe，連只有一行 `import ctypes` 都會在啟動時崩潰（`0xC0000409`，
+> 崩在 `ucrtbase.dll`），而相機 SDK 整合整個建立在 `ctypes.WinDLL` 上。
+> 同樣的程式用 python.org 官方 CPython 打包就完全正常。這是 Nuitka 對
+> Anaconda-on-Windows 支援較差的已知問題，不是本專案程式碼的 bug。
+> 日常開發要繼續用 conda 環境（`run_gui.bat`）沒問題，只有「打包」要用下面這個獨立的 venv。
+> `build.ps1` 會自動檢查，發現是 Anaconda Python 會直接中止。
+
+在 repo 根目錄照順序執行（建出來的 `.venv-build\` 已在 `.gitignore` 裡）：
+
+```powershell
+# 1. 安裝官方 Python 3.10（使用者範圍，不需要管理員權限，不改 PATH）
+winget install --id Python.Python.3.10 --exact --scope user --silent --override "/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0"
+
+# 2. 在 repo 根目錄建立打包專用 venv
+& "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe" -m venv .venv-build
+$py = ".\.venv-build\Scripts\python.exe"
+
+# 3. torch 一定要先裝、而且要指定 cu121 index（見 requirements.txt 開頭的說明），
+#    不要讓後面的 pip install -r requirements.txt 用預設 PyPI 裝到 CPU 版 torch
+& $py -m pip install --upgrade pip
+& $py -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+
+# 4. 其餘依賴 + 打包工具（requirements.txt 不含 nuitka）
+& $py -m pip install -r requirements.txt
+& $py -m pip install nuitka
+```
+
+`build.ps1` 預設就會使用 `.venv-build\Scripts\python.exe` 和
+`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`，建好環境之後直接 `.\build.ps1` 即可，不用帶參數。
+
+**前置檢查**（這幾項如果已經有，就不用額外安裝）：
+- **MSVC Build Tools**：檢查方式 `& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath` 如果印出路徑就代表已經有，Nuitka 會自動找到，不用另外裝、不用進 PATH
+- **Inno Setup 6**：檢查 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` 是否存在
+- **NVIDIA 驅動/GPU**：跑 `nvidia-smi` 確認看得到顯卡
+
+`torch==2.5.1+cu121` 這個 wheel 檔案約 2.4GB，下載+安裝在一般網路環境下需要抓幾分鐘到十幾分鐘不等，屬於整個流程裡最花時間的一步，其餘套件都很快。
 
 ---
 
@@ -328,7 +370,15 @@ VERSION = "1.0.0"
      隨裝機出貨，僅用於裝完之後的重新啟用（換機器/重灌）
    - `tools/license/generate_license.py`（只在你自己電腦上跑，不編譯、
      不出貨）：拿機器識別碼簽出授權碼
-6. `installer/setup.iss` 新增一個安裝精靈頁（`[Code]` 段的
+7. 打包後才會出現的路徑問題（2026-09-29 第一次真正打包時抓到並修正）：
+   - `license_check._app_dir()` 與 `nircam_launcher.pyw` 的安裝目錄改用 `sys.argv[0]`
+     ——onefile 的 launcher 執行時 `__file__` 在暫存解壓資料夾，找不到 `license.key` 和 `BasicDemo.exe`
+   - `BasicDemo.py` 的 MVS 檢查改用 `WinDLL(..., winmode=0)`，否則 Python 3.8+ 不搜尋 PATH，
+     MVS 明明有裝也會跳「找不到驅動」
+   - 海康 SDK（`MvImport\`）與 `tools/license/` 都是執行期改 `sys.path` 再 import，
+     Nuitka 看不到；由 `build.ps1` 用 `PYTHONPATH` + `--include-module` 處理，不修改原廠 SDK
+   - `build.ps1` 在 Inno Setup 之前會實際啟動 `BasicDemo.exe`，確認主視窗出現且監督式模型成功載入
+8. `installer/setup.iss` 新增一個安裝精靈頁（`[Code]` 段的
    `CreateInputQueryPage` + `NextButtonClick` + `CurStepChanged`），
    把授權驗證整合進安裝流程本身。
 
@@ -348,6 +398,12 @@ VERSION = "1.0.0"
   不防止逆向工程或記憶體內取模型權重。如果之後有更高保護需求，
   可以考慮商用 licensing SDK（如 Cryptolens）或程式碼混淆（如 PyArmor
   搭配 Nuitka）。
+- **防毒軟體會誤刪剛編好的 exe**：開發機上的 Trend Micro Apex One 曾在 Nuitka
+  回報成功之後，把 `build\nircam_launcher.exe`（onefile、有壓縮的執行檔）默默刪掉，
+  導致 Inno Setup 找不到檔案。`build.ps1` 已在打包前檢查所有 exe 是否還在；
+  如果一直被刪，請 IT 把 repo 的 `build\` 資料夾加進防毒排除清單。
+  **廠商端也可能遇到同樣的事**（企業防毒刪掉安裝後的 exe），交機前要提醒廠商，
+  長期解法是下一條的數位簽章。
 - **安裝檔沒有數位簽章**：Windows SmartScreen 可能會警告「未知發行者」。
   之後可以買程式碼簽章憑證（Code Signing Certificate）簽署 exe/安裝檔。
 - **CUDA/cuDNN DLL 掃描是 Nuitka 已知的脆弱點**：每次升級 torch 版本

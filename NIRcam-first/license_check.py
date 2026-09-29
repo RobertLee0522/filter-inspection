@@ -24,16 +24,14 @@ _FINGERPRINT_TIMEOUT_S = 10
 
 
 def _app_dir() -> str:
-    """Directory the running exe/script lives in.
+    """Directory of the exe/script that was launched -- where license.key lives.
 
-    Nuitka --standalone and --onefile both set sys.executable to the
-    produced exe's path, which is what we want: license.key sits next to
-    it in the install folder. Falls back to this file's own directory when
-    running un-frozen (e.g. from a plain `python BasicDemo.py`).
+    sys.argv[0], not __file__: in a Nuitka onefile build (nircam_launcher.exe)
+    __file__ points into the temp extraction folder, not the install folder.
+    Un-frozen, argv[0] is BasicDemo.py / nircam_launcher.pyw, so this is still
+    NIRcam-first/.
     """
-    if getattr(sys, "frozen", False) or "nuitka" in sys.modules:
-        return os.path.dirname(os.path.abspath(sys.executable))
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.abspath(sys.argv[0]))
 
 
 def get_machine_fingerprint() -> str | None:

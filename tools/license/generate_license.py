@@ -45,7 +45,9 @@ def main() -> int:
         f.write(signature)
 
     print(f"已產生授權檔：{out_path}")
-    print("把這個檔案交給廠商，放到安裝目錄（跟 nircam_launcher.exe 同一層）即可。")
+    print(f"授權碼：{signature}")
+    print("首次安裝：把上面的授權碼傳給廠商，貼進安裝精靈的「授權碼」欄位。")
+    print("換機器重新啟用：把這個 license.key 檔案傳給廠商，覆蓋安裝目錄裡的舊檔。")
     return 0
 
 

@@ -8,3 +8,10 @@ __pycache__/
 .gui_language
 *.log
 runs/
+
+# Packaging (see PACKAGING.md)
+.venv-build/
+build/
+dist/
+build_test*/
+license.key

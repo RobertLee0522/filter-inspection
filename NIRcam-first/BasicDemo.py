@@ -10,14 +10,18 @@ start_session_log()
 from license_check import enforce_license_or_exit
 enforce_license_or_exit()
 
+from version import VERSION
+
 # MvCameraControl_class loads MvCameraControl.dll by bare name via
 # ctypes.WinDLL at import time. If the vendor's Hikvision MVS runtime isn't
 # on this machine that raises an OSError deep inside an `import *`, which
 # looks like a crash to an operator. Probe for it first and fail with a
 # message box instead.
+# winmode=0, same as MvCameraControl_class.py: Python 3.8+'s default DLL search
+# for a bare name skips PATH, which is where the MVS installer puts its runtime.
 import ctypes as _ctypes
 try:
-    _ctypes.WinDLL("MvCameraControl.dll")
+    _ctypes.WinDLL("MvCameraControl.dll", winmode=0)
 except OSError:
     _ctypes.windll.user32.MessageBoxW(
         None,
@@ -518,7 +522,7 @@ if __name__ == "__main__":
     mainWindow = QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(mainWindow)
-    mainWindow.setWindowTitle("工業相機 AI 檢測應用 V1.5.3")
+    mainWindow.setWindowTitle(f"工業相機 AI 檢測應用 v{VERSION}")
 
     # --- 修改 UI 佈局 ---
     
