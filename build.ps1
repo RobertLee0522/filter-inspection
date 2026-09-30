@@ -87,6 +87,19 @@ if (-not (Test-Path $IsccPath)) {
     Fail "ISCC.exe not found at $IsccPath. Install Inno Setup 6 or pass -IsccPath."
 }
 
+# --- 2c. License signing key -------------------------------------------------
+# license_check.py falls back to a public placeholder when license_secret.py
+# is absent, so the dev tree runs -- but a build with the placeholder lets
+# anyone who has seen this repo mint codes for any machine.
+$secretFile = Join-Path $NirDir "license_secret.py"
+if (-not (Test-Path $secretFile)) {
+    Fail "NIRcam-first\license_secret.py not found. Create it once with: python tools\license\new_secret.py  (or copy it from the machine that made the existing codes)."
+}
+$usesPlaceholder = & $PythonExe -c "import sys; sys.path.insert(0, r'$NirDir'); import license_check as l; print(l.SECRET_KEY == l.PLACEHOLDER_SECRET)"
+if ($usesPlaceholder -ne "False") {
+    Fail "license_secret.py still holds the placeholder key (or failed to import: $usesPlaceholder)."
+}
+
 # --- 3. Clean previous build -------------------------------------------------
 # cmd's rd, not Remove-Item: on Windows PowerShell 5.1, Remove-Item -Recurse
 # over the ~11k-file torch build tree kills the whole PowerShell process with
@@ -103,6 +116,7 @@ Write-Host "`n=== Building nircam_launcher.exe (onefile) ===" -ForegroundColor C
     --onefile `
     --windows-console-mode=disable `
     --enable-plugin=tk-inter `
+    --include-module=license_secret `
     --windows-icon-from-ico="$NirDir\assets\nircam_inspection.ico" `
     --include-data-file="$NirDir\assets\splash.png=assets/splash.png" `
     --output-dir="$BuildDir" `
@@ -123,6 +137,7 @@ $env:PYTHONPATH = Join-Path $NirDir "MvImport"
     --assume-yes-for-downloads `
     --standalone `
     --enable-plugin=pyqt5 `
+    --include-module=license_secret `
     --include-module=CameraParams_const `
     --include-module=CameraParams_header `
     --include-module=PixelType_header `
@@ -150,6 +165,7 @@ Write-Host "`n=== Building FingerprintTool.exe (onefile) ===" -ForegroundColor C
     --assume-yes-for-downloads `
     --onefile `
     --include-module=license_check `
+    --include-module=license_secret `
     --output-dir="$BuildDir" `
     --output-filename=FingerprintTool.exe `
     "$RepoRoot\tools\license\print_fingerprint.py"
@@ -162,6 +178,7 @@ Write-Host "`n=== Building LicenseActivator.exe (onefile) ===" -ForegroundColor 
     --assume-yes-for-downloads `
     --onefile `
     --include-module=license_check `
+    --include-module=license_secret `
     --output-dir="$BuildDir" `
     --output-filename=LicenseActivator.exe `
     "$RepoRoot\tools\license\license_installer_helper.py"
@@ -178,7 +195,7 @@ foreach ($exe in @("nircam_launcher.exe", "FingerprintTool.exe", "LicenseActivat
         Fail "$exe is missing from build\ -- if Nuitka reported success, antivirus probably deleted it. Add build\ to the AV exclusion list and rebuild."
     }
 }
-foreach ($mod in @("inspection.enhance", "inspection.gpu_preprocess", "supervised_detect", "license_check",
+foreach ($mod in @("inspection.enhance", "inspection.gpu_preprocess", "supervised_detect", "license_check", "license_secret",
                    "CameraParams_const", "CameraParams_header", "MvCameraControl_class")) {
     if (-not (Test-Path (Join-Path $BuildDir "BasicDemo.build\module.$mod.c"))) {
         Fail "$mod was not compiled into BasicDemo.exe. Without inspection.* the app silently falls back to the old hybrid detector."

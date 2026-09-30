@@ -3,11 +3,11 @@ BasicDemo.py so bypassing the splash and launching BasicDemo.exe directly
 does not skip the check (see PACKAGING.md section 5).
 
 This is a soft binding meant to stop "copy the install folder to another
-machine", not a hardware dongle. Both this file and
-tools/license/generate_license.py must use the SAME SECRET_KEY -- it is the
-shared HMAC key, not a public one. Replace the placeholder below with your
-own secret before building a release, and keep that value out of anything
-you hand to the vendor.
+machine", not a hardware dongle. The HMAC key that signs and verifies codes
+lives in license_secret.py next to this file. That file is gitignored and is
+created once with tools/license/new_secret.py; Nuitka compiles it into the
+exes at build time. Without it, a public placeholder is used so the dev tree
+still runs, and build.ps1 refuses to package a release.
 """
 from __future__ import annotations
 
@@ -18,7 +18,12 @@ import os
 import subprocess
 import sys
 
-SECRET_KEY = b"REPLACE_WITH_YOUR_OWN_SECRET_BEFORE_BUILDING_A_RELEASE"
+PLACEHOLDER_SECRET = b"REPLACE_WITH_YOUR_OWN_SECRET_BEFORE_BUILDING_A_RELEASE"
+
+try:
+    from license_secret import SECRET_KEY
+except ImportError:
+    SECRET_KEY = PLACEHOLDER_SECRET
 
 _FINGERPRINT_TIMEOUT_S = 10
 

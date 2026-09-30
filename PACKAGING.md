@@ -284,13 +284,28 @@ $py = ".\.venv-build\Scripts\python.exe"
 （也可以選擇直接重新執行一次 `FilterInspection_Setup_v{VERSION}.exe`，
 走一次跟第一次安裝一樣的精靈流程，效果相同，只是比較重。）
 
-`license_check.py` 裡的 `SECRET_KEY` 是所有授權相關工具（`license_check.py`
-本身、`LicenseActivator.exe`、`generate_license.py`）共用的簽章金鑰，
-**正式出貨前務必換成你自己的隨機字串**，並且只放在你自己的電腦上。
-即使 `LicenseActivator.exe` 和 `FingerprintTool.exe` 會隨安裝檔/安裝過程
-出現在廠商機器上，`SECRET_KEY` 仍會被 Nuitka 一起編譯進這些二進位檔裡
-（沒有辦法讓「驗證邏輯」出現在廠商機器上、又完全不讓金鑰出現在裡面）；
-這是本方案「非硬體加密狗」的已知限制，見第 10 節。
+### 5.3 簽章金鑰（`license_secret.py`）
+
+所有授權碼都由一把簽章金鑰算出來，放在 `NIRcam-first/license_secret.py`。
+**這個檔案不進 git**（`.gitignore` 已排除），打包時由 Nuitka 編進 exe 裡。
+
+**第一次設定（只做一次）**：
+```powershell
+python tools\license\new_secret.py
+```
+會產生一把隨機金鑰寫進 `license_secret.py`，畫面上不會顯示金鑰內容。接著：
+1. **立刻備份這個檔案**（例如密碼管理器）。遺失就無法再為已出貨的版本產生授權碼。
+2. 其他要打包的電腦（例如同事那台），**手動複製**這個檔案過去，不要經過 git 或公開管道。
+3. 之前用預留金鑰產生的測試授權碼全部作廢，用新版重裝後要重新產生。
+
+**保護機制**：
+- 沒有 `license_secret.py` 時，程式會退回公開的預留金鑰，開發環境照樣能跑；
+  但 `build.ps1` 會直接拒絕打包，`generate_license.py` 也會印出警告。
+- `new_secret.py` 發現檔案已存在會拒絕覆蓋——換金鑰會讓所有已發出的授權碼失效。
+  真的要換，要自己先手動刪掉舊檔。
+
+金鑰會被編譯進出貨的 exe 裡（驗證邏輯要在廠商機器上跑，就不可能完全不帶金鑰），
+有心人逆向工程仍可能取出。這是本方案「非硬體加密狗」的已知限制，見第 10 節。
 
 ---
 

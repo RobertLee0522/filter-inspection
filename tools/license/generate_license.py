@@ -23,7 +23,7 @@ except Exception:
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "NIRcam-first")
 )
-from license_check import SECRET_KEY  # noqa: E402
+from license_check import PLACEHOLDER_SECRET, SECRET_KEY  # noqa: E402
 
 
 def main() -> int:
@@ -35,6 +35,10 @@ def main() -> int:
     if len(fingerprint) != 64 or not all(c in "0123456789abcdef" for c in fingerprint.lower()):
         print("這不像是一個有效的機器識別碼（應該是 64 個十六進位字元的 SHA-256 雜湊）。")
         return 1
+
+    if SECRET_KEY == PLACEHOLDER_SECRET:
+        print("警告：找不到 NIRcam-first/license_secret.py，正在用公開的預留金鑰簽發。")
+        print("  這組授權碼只適用於開發測試版，不能給廠商。先執行 python tools/license/new_secret.py")
 
     out_path = sys.argv[2] if len(sys.argv) > 2 else "license.key"
     signature = hmac.new(

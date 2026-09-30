@@ -15,3 +15,5 @@ build/
 dist/
 build_test*/
 license.key
+# The license signing key (see tools/license/new_secret.py). Never commit.
+NIRcam-first/license_secret.py

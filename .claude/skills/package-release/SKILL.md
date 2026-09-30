@@ -15,10 +15,11 @@ Full design and background live in `PACKAGING.md`. This is the operating procedu
 - `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` exists.
 - `weights\supervised_global.pt` is the real checkpoint (> 100 MB).
 - `git status` is clean, or the user confirms the uncommitted changes belong in this release.
-- `NIRcam-first\license_check.py` `SECRET_KEY` is NOT the placeholder
-  `REPLACE_WITH_YOUR_OWN_SECRET_BEFORE_BUILDING_A_RELEASE` for a vendor release.
-  Never choose, print, or commit the real secret yourself — ask the user to set it.
-  Changing it invalidates every license.key issued for the old value (PACKAGING.md 5.2).
+- `NIRcam-first\license_secret.py` exists (gitignored; build.ps1 refuses to run
+  without it). If missing, **stop and ask the user** — they either copy it from the
+  machine that issued the existing codes, or run `python tools\license\new_secret.py`
+  themselves for a first-ever setup. Never create, read out, print, or commit it
+  yourself: a new key invalidates every code already issued (PACKAGING.md 5.3).
 
 ## 2. Version
 
@@ -63,7 +64,7 @@ model loaded`, `Successful compile`, `BUILD COMPLETE`. Anything less is a failur
 | Nuitka prompts for a download and dies | `--assume-yes-for-downloads` removed from build.ps1 — put it back. |
 | exe exits `-1073740791` (0xC0000409) | Built from Anaconda Python. Use `.venv-build`. |
 | `No module named 'license_check'` from a tools\license exe | build.ps1 lost the `PYTHONPATH` + `--include-module=license_check` for that step. |
-| smoke test: valid code rejected | `SECRET_KEY` differs between build and `generate_license.py`. |
+| smoke test: valid code rejected | Built exe and `generate_license.py` see different keys — `license_secret.py` not compiled in (check the `--include-module=license_secret` flags). |
 | `No module named 'CameraParams_const'` (or another MvImport sibling) | Hikvision SDK uses bare-name sibling imports. BasicDemo step needs `PYTHONPATH=NIRcam-first\MvImport` + the `--include-module=` list. |
 | Any `No module named X` where X is imported after a runtime `sys.path.insert/append` | Same class of bug: Nuitka can't follow runtime sys.path edits. Put the folder on `PYTHONPATH` for that Nuitka call and add `--include-module=X`. |
 | MVS "driver not found" box though MVS is installed | `ctypes.WinDLL(name)` without `winmode=0` skips PATH on Python 3.8+. |
