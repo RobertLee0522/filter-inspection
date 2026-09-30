@@ -257,7 +257,10 @@ $py = ".\.venv-build\Scripts\python.exe"
    產生 `license.key`（這個檔案的內容就是「授權碼」字串）
 4. 把授權碼字串（`license.key` 打開複製內容，或直接把整段字串）回傳給廠商，
    請他們貼進安裝精靈「授權碼」欄位，按下一步，安裝才會繼續完成
-5. 授權碼比對錯誤時，精靈會跳出錯誤訊息並卡在該頁，不會讓安裝繼續；
+5. 安裝完成後**不會自動開啟程式**（早期版本在最後一頁有「啟動」勾選框，
+   在廠商電腦上按「完成」時跳出 `Internal error: CallSpawnServer` 已移除），
+   請從桌面捷徑啟動。
+6. 授權碼比對錯誤時，精靈會跳出錯誤訊息並卡在該頁，不會讓安裝繼續；
    比對成功後，安裝完成的同時 `license.key` 會自動寫進安裝目錄，
    **不需要廠商再手動放檔案**
 
@@ -313,6 +316,9 @@ $py = ".\.venv-build\Scripts\python.exe"
 
 - [ ] 安裝檔可以正常安裝，桌面/開始選單捷徑指向 `nircam_launcher.exe`
 - [ ] 雙擊捷徑後，splash 正常顯示動畫，並在數秒內接手顯示主視窗
+- [ ] **用一般使用者權限**（不是「以系統管理員身分執行」）從桌面捷徑啟動也能開、
+      `C:\Program Files\FilterInspection\logs\` 有寫入當天的記錄檔
+      （程式裝在 Program Files，一般使用者預設只能讀；安裝檔只開放 `logs\` 可寫）
 - [ ] 主視窗畫面上顯示的推論裝置字串確認是 **CUDA/GPU**，不是悄悄退回 CPU
       （Nuitka 常見的坑：編譯不報錯，但 CUDA/cuDNN DLL 沒被掃到，
       跑到別台機器上退回 CPU 模式或直接崩潰）
@@ -386,11 +392,13 @@ $py = ".\.venv-build\Scripts\python.exe"
 
 ## 10. 已知限制與後續強化方向
 
-- **安裝檔不能無人值守靜默安裝**：因為授權碼要在安裝過程中人工輸入，
-  `FilterInspection_Setup_v{VERSION}.exe /VERYSILENT` 這種靜默安裝參數
-  沒辦法完成（精靈頁會卡住等輸入）。如果之後有大量部署需求，需要另外
-  設計一個「/LICENSECODE=xxx」之類的命令列參數，在 `[Code]` 裡判斷
-  `ExpandConstant('{param:LICENSECODE}')` 略過互動頁直接驗證。
+- **靜默安裝要帶授權碼**：IT 用腳本部署時可以這樣下（需以系統管理員身分）：
+  ```
+  FilterInspection_Setup_v1.0.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LICENSECODE=<授權碼>
+  ```
+  授權碼一樣要先用 `generate_license.py` 針對**那台機器**的識別碼產生。
+  沒帶或授權碼錯誤時，安裝程式會在複製任何檔案之前以 exit code 1 結束
+  （不會像早期版本那樣卡住不動），原因寫在 `/LOG=路徑` 指定的安裝日誌裡。
 - **無 CI/CD**：目前打包是手動在開發機上跑 `build.ps1`。之後可以接
   GitHub Actions self-hosted runner（因為要 GPU 機器）或內部 Jenkins，
   在打 tag 時自動觸發打包。

@@ -46,12 +46,21 @@ Source: "{#BuildDir}\FingerprintTool.exe"; DestDir: "{app}\Tools"; Flags: ignore
 ; files even exist on disk.
 Source: "{#BuildDir}\LicenseActivator.exe"; DestDir: "{tmp}"; Flags: dontcopy
 
+[Dirs]
+; The launcher and BasicDemo.exe append to {app}\logs on every start, but
+; ordinary users only get read access under Program Files -- a normal
+; (non-admin) double-click of the shortcut would die before the splash shows.
+; Grant write on logs\ only, so operators still can't replace the exes.
+Name: "{app}\logs"; Permissions: users-modify
+
 [Icons]
 Name: "{group}\NIRcam Inspection"; Filename: "{app}\nircam_launcher.exe"
 Name: "{autodesktop}\NIRcam Inspection"; Filename: "{app}\nircam_launcher.exe"
 
-[Run]
-Filename: "{app}\nircam_launcher.exe"; Description: "啟動 NIRcam Inspection"; Flags: nowait postinstall skipifsilent
+; No [Run] "launch now" checkbox: Inno starts a postinstall program as the
+; original non-admin user through its spawn server, and on a vendor machine
+; that handoff failed with "Internal error: CallSpawnServer: Unexpected
+; response: $0". Operators start the app from the desktop shortcut instead.
 
 [Messages]
 FinishedLabel=安裝完成。%n%n若這台機器尚未安裝相機廠商的 Hikvision MVS 驅動程式，請先安裝 MVS Runtime 後再啟動本程式。
@@ -91,6 +100,43 @@ begin
      codes. *)
   if LoadStringFromFile(OutFile, Output) then
     Result := Trim(String(Output));
+end;
+
+(* Silent installs (/SILENT, /VERYSILENT) take the code from
+   /LICENSECODE=<code> and verify it before anything is copied. Without this,
+   the license page's NextButtonClick rejects the empty field forever and
+   the silent setup hangs instead of exiting. A bad or missing code exits
+   with a non-zero code; the license stays machine-bound either way. *)
+function InitializeSetup(): Boolean;
+var
+  Code, OutFile, Status: String;
+begin
+  Result := True;
+  if not WizardSilent then
+    exit;
+
+  Code := Trim(ExpandConstant('{param:LICENSECODE|}'));
+  if Code = '' then
+  begin
+    Log('Silent install requires /LICENSECODE=<code>; aborting.');
+    Result := False;
+    exit;
+  end;
+
+  OutFile := ExpandConstant('{tmp}\license_check.txt');
+  Status := RunActivator('check "' + Code + '" "' + OutFile + '"', OutFile);
+  if Copy(Status, 1, 3) = 'OK:' then
+    LicenseCodeValue := Copy(Status, 4, MaxInt)
+  else
+  begin
+    Log('License check failed (' + Status + '); aborting silent install.');
+    Result := False;
+  end;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := WizardSilent and (PageID = LicensePage.ID);
 end;
 
 procedure InitializeWizard;
