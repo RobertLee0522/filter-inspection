@@ -3,4 +3,4 @@ VERSION) and shown in the GUI title / about dialog. Bump per PACKAGING.md
 section 2 (SemVer) when cutting a release -- nothing else reads git tags.
 """
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"

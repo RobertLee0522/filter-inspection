@@ -47,12 +47,6 @@ import numpy as np
 import cv2
 from CamOperation_class import set_ai_model, set_ai_parameters_func
 from CamOperation_class import set_manual_image_shape
-from CamOperation_class import (
-    set_boundary_line_positions, 
-    get_boundary_line_positions, 
-    set_boundary_filter_enabled, 
-    is_boundary_filter_enabled
-)
 
 # --- 新增: 用於跨執行緒通訊的訊號發射器 ---
 class SignalEmitter(QObject):
@@ -522,7 +516,7 @@ if __name__ == "__main__":
     mainWindow = QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(mainWindow)
-    mainWindow.setWindowTitle(f"工業相機 AI 檢測應用 v{VERSION}")
+    mainWindow.setWindowTitle(i18n.tr_fmt("工業相機 AI 檢測應用 v{version}", version=VERSION))
 
     # --- 修改 UI 佈局 ---
     
@@ -626,66 +620,6 @@ if __name__ == "__main__":
     
     ai_param_group.setLayout(ai_param_layout)
     control_layout.addWidget(ai_param_group)
-
-    # === 邊界線過濾設定區塊 ===
-    boundary_group = QGroupBox("邊界線過濾設定")
-    boundary_layout = QVBoxLayout()
-    
-    # 啟用/停用邊界線過濾
-    ui.chkBoundaryFilterEnabled = QCheckBox("啟用邊界線過濾")
-    ui.chkBoundaryFilterEnabled.setChecked(True)
-    ui.chkBoundaryFilterEnabled.setStyleSheet("font-weight: bold;")
-    boundary_layout.addWidget(ui.chkBoundaryFilterEnabled)
-    
-    # 上邊界線設定
-    top_line_layout = QHBoxLayout()
-    top_line_layout.addWidget(QLabel("上線:"))
-    ui.sliderTopLine = QSlider(Qt.Horizontal)
-    ui.sliderTopLine.setMinimum(0)
-    ui.sliderTopLine.setMaximum(100)
-    ui.sliderTopLine.setValue(0)
-    top_line_layout.addWidget(ui.sliderTopLine)
-    ui.edtTopLinePercent = QLineEdit("0")
-    ui.edtTopLinePercent.setMaximumWidth(40)
-    top_line_layout.addWidget(ui.edtTopLinePercent)
-    top_line_layout.addWidget(QLabel("%"))
-    ui.lblTopLineColor = QLabel("■")
-    ui.lblTopLineColor.setStyleSheet("color: yellow; font-weight: bold;")
-    top_line_layout.addWidget(ui.lblTopLineColor)
-    boundary_layout.addLayout(top_line_layout)
-    
-    # 下邊界線設定
-    bottom_line_layout = QHBoxLayout()
-    bottom_line_layout.addWidget(QLabel("下線:"))
-    ui.sliderBottomLine = QSlider(Qt.Horizontal)
-    ui.sliderBottomLine.setMinimum(0)
-    ui.sliderBottomLine.setMaximum(100)
-    ui.sliderBottomLine.setValue(100)
-    bottom_line_layout.addWidget(ui.sliderBottomLine)
-    ui.edtBottomLinePercent = QLineEdit("100")
-    ui.edtBottomLinePercent.setMaximumWidth(40)
-    bottom_line_layout.addWidget(ui.edtBottomLinePercent)
-    bottom_line_layout.addWidget(QLabel("%"))
-    ui.lblBottomLineColor = QLabel("■")
-    ui.lblBottomLineColor.setStyleSheet("color: cyan; font-weight: bold;")
-    bottom_line_layout.addWidget(ui.lblBottomLineColor)
-    boundary_layout.addLayout(bottom_line_layout)
-    
-    # 按鈕區域
-    boundary_btn_layout = QHBoxLayout()
-    ui.bnApplyBoundaryLines = QPushButton("套用")
-    ui.bnResetBoundaryLines = QPushButton("重設")
-    boundary_btn_layout.addWidget(ui.bnApplyBoundaryLines)
-    boundary_btn_layout.addWidget(ui.bnResetBoundaryLines)
-    boundary_layout.addLayout(boundary_btn_layout)
-    
-    # 目前邊界線狀態
-    ui.lblBoundaryStatus = QLabel("上線 0%, 下線 100%")
-    ui.lblBoundaryStatus.setStyleSheet("color: blue; font-size: 10px;")
-    boundary_layout.addWidget(ui.lblBoundaryStatus)
-    
-    boundary_group.setLayout(boundary_layout)
-    control_layout.addWidget(boundary_group)
 
     # === TCP 伺服器控制區 ===
     tcp_control_group = QGroupBox("TCP 伺服器控制")
@@ -811,13 +745,6 @@ if __name__ == "__main__":
         # the actual values.
         update_ai_param_display()
         try:
-            ui.lblBoundaryStatus.setText(i18n.tr_fmt(
-                "目前邊界線: 上線 {top}%, 下線 {bottom}%",
-                top=ui.edtTopLinePercent.text(),
-                bottom=ui.edtBottomLinePercent.text()))
-        except (AttributeError, RuntimeError):
-            pass
-        try:
             apply_manual_image_shape()
         except (AttributeError, RuntimeError):
             pass
@@ -849,101 +776,6 @@ if __name__ == "__main__":
     ui.bnUpdateAIParams.clicked.connect(update_ai_parameters)
     ui.bnResetAIParams.clicked.connect(reset_ai_parameters)
 
-    # === 新增 邊界線設定事件處理函數 ===
-    def update_top_line_from_slider():
-        """滑桿更新時同步更新文字框"""
-        value = ui.sliderTopLine.value()
-        ui.edtTopLinePercent.setText(str(value))
-    
-    def update_bottom_line_from_slider():
-        """滑桿更新時同步更新文字框"""
-        value = ui.sliderBottomLine.value()
-        ui.edtBottomLinePercent.setText(str(value))
-    
-    def update_top_line_from_text():
-        """文字框更新時同步更新滑桿"""
-        try:
-            value = int(ui.edtTopLinePercent.text())
-            value = max(0, min(100, value))
-            ui.sliderTopLine.setValue(value)
-        except ValueError:
-            pass
-    
-    def update_bottom_line_from_text():
-        """文字框更新時同步更新滑桿"""
-        try:
-            value = int(ui.edtBottomLinePercent.text())
-            value = max(0, min(100, value))
-            ui.sliderBottomLine.setValue(value)
-        except ValueError:
-            pass
-    
-    def apply_boundary_lines():
-        """套用邊界線設定"""
-        try:
-            top_percent = int(ui.edtTopLinePercent.text())
-            bottom_percent = int(ui.edtBottomLinePercent.text())
-            
-            # 驗證範圍
-            if not (0 <= top_percent <= 100) or not (0 <= bottom_percent <= 100):
-                QMessageBox.warning(mainWindow, "參數錯誤", "邊界線位置必須介於 0 到 100 之間！")
-                return
-            
-            # 驗證上線必須在下線之上
-            if top_percent >= bottom_percent:
-                QMessageBox.warning(mainWindow, "參數錯誤", "上邊界線位置必須小於下邊界線位置！")
-                return
-            
-            # 設定邊界線位置 (轉換為 0.0 ~ 1.0 的比例)
-            set_boundary_line_positions(top_percent / 100.0, bottom_percent / 100.0)
-            
-            # 更新狀態顯示
-            ui.lblBoundaryStatus.setText(i18n.tr_fmt("目前邊界線: 上線 {top}%, 下線 {bottom}%", top=top_percent, bottom=bottom_percent))
-            
-            QMessageBox.information(mainWindow, "邊界線設定", 
-                f"邊界線已更新：\n上邊界線: {top_percent}%\n下邊界線: {bottom_percent}%")
-            
-        except ValueError:
-            QMessageBox.warning(mainWindow, "參數錯誤", "請輸入有效的數值！")
-    
-    def reset_boundary_lines():
-        """重設邊界線為預設值"""
-        ui.sliderTopLine.setValue(0)
-        ui.sliderBottomLine.setValue(100)
-        ui.edtTopLinePercent.setText("0")
-        ui.edtBottomLinePercent.setText("100")
-        set_boundary_line_positions(0.0, 1.0)
-        ui.lblBoundaryStatus.setText(i18n.tr_fmt("目前邊界線: 上線 {top}%, 下線 {bottom}%", top=0, bottom=100))
-        QMessageBox.information(mainWindow, "邊界線設定", "邊界線已重設為預設值：\n上邊界線: 0%\n下邊界線: 100%")
-    
-    def toggle_boundary_filter():
-        """切換邊界線過濾功能"""
-        enabled = ui.chkBoundaryFilterEnabled.isChecked()
-        set_boundary_filter_enabled(enabled)
-        
-        # 更新 UI 狀態
-        ui.sliderTopLine.setEnabled(enabled)
-        ui.sliderBottomLine.setEnabled(enabled)
-        ui.edtTopLinePercent.setEnabled(enabled)
-        ui.edtBottomLinePercent.setEnabled(enabled)
-        ui.bnApplyBoundaryLines.setEnabled(enabled)
-        ui.bnResetBoundaryLines.setEnabled(enabled)
-        
-        if enabled:
-            QMessageBox.information(mainWindow, "邊界線過濾", 
-                "✅ 已啟用邊界線過濾\n\n只有觸碰到邊界線的辨識結果才會傳送給 TCP/IP")
-        else:
-            QMessageBox.information(mainWindow, "邊界線過濾", 
-                "⏸ 已停用邊界線過濾\n\n所有辨識結果都會傳送給 TCP/IP")
-    
-    # 連接邊界線設定事件
-    ui.sliderTopLine.valueChanged.connect(update_top_line_from_slider)
-    ui.sliderBottomLine.valueChanged.connect(update_bottom_line_from_slider)
-    ui.edtTopLinePercent.editingFinished.connect(update_top_line_from_text)
-    ui.edtBottomLinePercent.editingFinished.connect(update_bottom_line_from_text)
-    ui.bnApplyBoundaryLines.clicked.connect(apply_boundary_lines)
-    ui.bnResetBoundaryLines.clicked.connect(reset_boundary_lines)
-    ui.chkBoundaryFilterEnabled.stateChanged.connect(toggle_boundary_filter)
 
     # --- 新增: 連接訊號與槽 ---
     signals.original_image_ready.connect(update_original_display)
