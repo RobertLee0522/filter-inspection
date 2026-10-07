@@ -350,8 +350,9 @@ class CameraOperation:
                 nPacketSize = self.obj_cam.MV_CC_GetOptimalPacketSize()
                 if int(nPacketSize) > 0:
                     self.obj_cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
-    
-            self.obj_cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
+
+            # 不動 TriggerMode / TriggerSource：沿用相機現有設定（例如在 MVS 設好的
+            # Line0 觸發）。原本這裡強制關閉觸發，開程式就把 MVS 的設定蓋掉。
             return MV_OK
 
 
@@ -405,11 +406,37 @@ class CameraOperation:
         print("close device successfully!")
         return MV_OK
 
-    def Set_trigger_mode(self, is_trigger_mode, source="Line0"):
-        """設置觸發模式"""
+    def Get_trigger_mode(self):
+        """讀相機目前的觸發設定，回傳 (是否為觸發模式, 觸發來源名稱)。
+
+        觸發來源是 "Line0"、"Software" 這類 GenICam 名稱；讀不到 TriggerMode 時
+        回傳 (None, None)，讀不到來源時來源為 None。
+        """
+        if not self.b_open_device:
+            return None, None
+
+        stMode = MVCC_ENUMVALUE()
+        memset(byref(stMode), 0, sizeof(MVCC_ENUMVALUE))
+        if self.obj_cam.MV_CC_GetEnumValue("TriggerMode", stMode) != 0:
+            return None, None
+        is_trigger = stMode.nCurValue == MV_TRIGGER_MODE_ON
+
+        source = None
+        stSource = MVCC_ENUMVALUE()
+        memset(byref(stSource), 0, sizeof(MVCC_ENUMVALUE))
+        if self.obj_cam.MV_CC_GetEnumValue("TriggerSource", stSource) == 0:
+            stEntry = MVCC_ENUMENTRY()
+            memset(byref(stEntry), 0, sizeof(MVCC_ENUMENTRY))
+            stEntry.nValue = stSource.nCurValue
+            if self.obj_cam.MV_CC_GetEnumEntrySymbolic("TriggerSource", stEntry) == 0:
+                source = stEntry.chSymbolic.decode("ascii", "replace")
+        return is_trigger, source
+
+    def Set_trigger_mode(self, is_trigger_mode, source=None):
+        """設置觸發模式。source 為 None 時不動相機現有的觸發來源。"""
         if not self.b_open_device:
             return MV_E_CALLORDER
-    
+
         if not is_trigger_mode:
             # 關閉觸發（FreeRun）
             ret = self.obj_cam.MV_CC_SetEnumValue("TriggerMode", 0)
@@ -420,7 +447,10 @@ class CameraOperation:
             ret = self.obj_cam.MV_CC_SetEnumValue("TriggerMode", 1)
             if ret != 0:
                 return ret
-    
+
+            if source is None:
+                return MV_OK
+
             # 用字串來設定觸發來源 → 保證對應正確
             if source == "Software":
                 ret = self.obj_cam.MV_CC_SetEnumValueByString("TriggerSource", "Software")

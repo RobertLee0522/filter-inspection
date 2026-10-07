@@ -64,14 +64,17 @@ print("-----------------------------------Entry Yolo-Model-----7 class , materia
 from CamOperation_class import set_ai_model
 set_ai_model(ai_model)
 
-# 觸發來源。CameraOperation.Set_trigger_mode 的預設值是 "Line0"（硬體觸發），
-# 而呼叫端都沒有傳這個參數，於是相機被設成等待 Line0 的硬體脈衝，畫面卻顯示
-# 「軟體觸發模式」並開放軟體觸發按鈕 —— 按下去相機不理會，取流只會一直回
-# 80000007 (MV_E_NODATA)、完全沒有畫面。這裡把來源講明白。
+# 觸發設定以相機為準：開相機時讀出 TriggerMode / TriggerSource（在 MVS 設好的
+# 值，例如 Line0），畫面跟著顯示，不覆寫。原本固定寫入 Software，一開程式就把
+# MVS 設好的 Line0 蓋掉。
 #
-# 產線若是由外部訊號驅動，改用 Line0：
+# 要強制指定來源才設環境變數，例如：
 #     set NIRCAM_TRIGGER_SOURCE=Line0
-TRIGGER_SOURCE = _os.environ.get("NIRCAM_TRIGGER_SOURCE", "Software")
+TRIGGER_SOURCE = _os.environ.get("NIRCAM_TRIGGER_SOURCE") or None
+
+# 相機目前的觸發來源（"Line0"、"Software"…），開相機時讀出。只有 Software
+# 來源時軟體觸發按鈕才有作用，硬體來源下按了相機不會理會。
+trigger_source = None
 
 # 新增全域變數用於控制 AI 檢測參數
 ai_conf_thres = 0.4  # 默認信心指數閾值
@@ -308,7 +311,7 @@ if __name__ == "__main__":
             QMessageBox.warning(mainWindow, "Error", strError, QMessageBox.Ok)
             isOpen = False
         else:
-            set_continue_mode()
+            sync_trigger_mode()
             get_param()
             isOpen = True
             enable_controls()
@@ -353,13 +356,39 @@ if __name__ == "__main__":
             ui.bnSoftwareTrigger.setEnabled(False)
 
     def set_software_trigger_mode():
-        # 一定要指定來源，否則會落到 Set_trigger_mode 的預設 "Line0"，
-        # 相機等硬體脈衝而軟體觸發按鈕完全無效。
+        # 切到觸發模式。沒指定 NIRCAM_TRIGGER_SOURCE 時保留相機現有的來源
+        # （例如 MVS 設的 Line0），不改成 Software。
         ret = obj_cam_operation.Set_trigger_mode(True, source=TRIGGER_SOURCE)
         if ret == 0:
             ui.radioContinueMode.setChecked(False)
             ui.radioTriggerMode.setChecked(True)
-            ui.bnSoftwareTrigger.setEnabled(isGrabbing)
+            ui.bnSoftwareTrigger.setEnabled(isGrabbing and trigger_source == "Software")
+
+    def sync_trigger_mode():
+        """開相機後讓畫面跟相機的觸發設定一致；有設 NIRCAM_TRIGGER_SOURCE 才覆寫相機。
+
+        回傳是否為觸發模式；讀不到相機設定時回傳 None，畫面維持原狀。
+        """
+        global trigger_source
+        if TRIGGER_SOURCE:
+            ret = obj_cam_operation.Set_trigger_mode(True, source=TRIGGER_SOURCE)
+            if ret != 0:
+                print(f"[警告] 套用 NIRCAM_TRIGGER_SOURCE={TRIGGER_SOURCE} 失敗 ({ToHexStr(ret)})")
+
+        is_trigger, trigger_source = obj_cam_operation.Get_trigger_mode()
+        if is_trigger is None:
+            print("[警告] 讀不到相機的觸發設定，畫面上的觸發模式可能與相機不符")
+            return None
+
+        ui.radioContinueMode.setChecked(not is_trigger)
+        ui.radioTriggerMode.setChecked(is_trigger)
+        if is_trigger:
+            print(f"[相機] 觸發模式，觸發來源: {trigger_source}")
+            if trigger_source != "Software":
+                print(f"       等待 {trigger_source} 硬體脈衝；沒有訊號就不會有畫面。")
+        else:
+            print("[相機] 連續取像模式")
+        return is_trigger
 
     def trigger_once():
         ret = obj_cam_operation.Trigger_once()
@@ -471,7 +500,8 @@ if __name__ == "__main__":
         ui.bnClose.setEnabled(isOpen)
         ui.bnStart.setEnabled(isOpen and (not isGrabbing))
         ui.bnStop.setEnabled(isOpen and isGrabbing)
-        ui.bnSoftwareTrigger.setEnabled(isGrabbing and ui.radioTriggerMode.isChecked())
+        ui.bnSoftwareTrigger.setEnabled(isGrabbing and ui.radioTriggerMode.isChecked()
+                                        and trigger_source == "Software")
         ui.bnSaveImage.setEnabled(isOpen and isGrabbing)
 
     # --- 新增: 更新 UI 的槽函式 ---
@@ -889,19 +919,10 @@ if __name__ == "__main__":
         isOpen = True
         print(f"[成功] 設備已打開: {devList[0]}")
         
-        # 步驟 3: 設置觸發模式（軟體觸發模式）
-        print("[步驟 3/4] 正在設置觸發模式...")
-        # True = 觸發模式, False = 連續模式。來源必須明講，見 TRIGGER_SOURCE。
-        ret = obj_cam_operation.Set_trigger_mode(True, source=TRIGGER_SOURCE)
-        if ret == 0:
-            ui.radioContinueMode.setChecked(False)
-            ui.radioTriggerMode.setChecked(True)
-            print(f"[成功] 已設置為觸發模式，觸發來源: {TRIGGER_SOURCE}")
-            if TRIGGER_SOURCE != "Software":
-                print(f"       等待 {TRIGGER_SOURCE} 硬體脈衝；沒有訊號就不會有畫面。")
-        else:
-            print(f"[警告] 設置觸發模式失敗 ({ToHexStr(ret)})，保持預設模式")
-        
+        # 步驟 3: 讀取相機的觸發設定（沿用 MVS 的設定，不覆寫）
+        print("[步驟 3/4] 正在讀取觸發模式...")
+        is_trigger = sync_trigger_mode()
+
         # 獲取並設置相機參數
         get_param()
         
@@ -920,13 +941,18 @@ if __name__ == "__main__":
         
         # 更新 UI 控制狀態
         enable_controls()
-        ui.bnSoftwareTrigger.setEnabled(True)  # 觸發模式下允許軟體觸發
-        
+
+        if is_trigger is None:
+            mode_text = "未知（讀不到相機設定）"
+        elif is_trigger:
+            mode_text = f"觸發模式（來源 {trigger_source}）"
+        else:
+            mode_text = "連續取像模式"
         print("=" * 50)
         print("自動初始化完成！")
         print("  - 設備: " + devList[0])
-        print("  - 模式: 軟體觸發模式")
-        print("  - 狀態: 正在採集，等待觸發信號")
+        print("  - 模式: " + mode_text)
+        print("  - 狀態: 正在採集" + ("，等待觸發信號" if is_trigger else ""))
         print("=" * 50)
         
         return True
